@@ -31,7 +31,7 @@ with open(path.join(here, "DESCRIPTION.md"), encoding="utf-8") as description:
 		license="MIT",
 		classifiers=[
 			"Development Status :: 4 - Beta",
-			"Topic :: Scientific Engineering :: Bio-Informatics",
+			"Topic :: Scientific/Engineering :: Bio-Informatics",
 			"License :: OSI Approved :: MIT License",
 			"Operating System :: POSIX :: Linux",
 			"Programming Language :: Python :: 3.7",
