@@ -1,0 +1,5 @@
+intervaltree
+numpy
+pandas
+sqlalchemy==1.4.44
+pysam

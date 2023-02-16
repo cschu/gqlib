@@ -3,14 +3,18 @@
 """ module docstring """
 
 import gzip
+import json
 import logging
+import os
 import time
 
-from gffquant.db.annotation_db import AnnotationDatabaseManager
-from gffquant.counters import CountManager
-from gffquant.annotation import GeneCountAnnotator, RegionCountAnnotator, CountWriter
-from gffquant.counters.coverage_counter import CoverageCounter
-from gffquant.alignment import AlignmentGroup, AlignmentProcessor, SamFlags
+from ..db.annotation_db import AnnotationDatabaseManager
+from ..counters import CountManager
+from ..annotation import GeneCountAnnotator, RegionCountAnnotator, CountWriter
+from ..counters.coverage_counter import CoverageCounter
+from ..alignment import AlignmentGroup, AlignmentProcessor, SamFlags
+
+from .. import __tool__
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +27,7 @@ class FeatureQuantifier:
     def __init__(
         self,
         db=None,
-        out_prefix="gffquant",
+        out_prefix=__tool__,
         ambig_mode="unique_only",
         reference_type="genome",
         strand_specific=False,
@@ -122,9 +126,9 @@ class FeatureQuantifier:
 
             yield ({rid: hits}, aln_count, 0 if aln_count else 1)
 
-    def process_counters(self, unannotated_ambig):
+    def process_counters(self, unannotated_ambig, aln_count):
         if self.adm is None:
-            self.adm = AnnotationDatabaseManager(self.db)
+            self.adm = AnnotationDatabaseManager.from_db(self.db)
 
         self.count_manager.dump_raw_counters(self.out_prefix, self.alp)
 
@@ -139,6 +143,7 @@ class FeatureQuantifier:
 
         count_writer = CountWriter(
             self.out_prefix,
+            aln_count,
             has_ambig_counts=self.count_manager.has_ambig_counts(),
             strand_specific=self.strand_specific,
         )
@@ -178,6 +183,7 @@ class FeatureQuantifier:
         )
 
         aln_count = 0
+        read_count = 0
         current_aln_group = None
         for aln_count, aln in enumerate(aln_stream, start=1):
             if self.ambig_mode == "primary_only" and not aln.is_primary():
@@ -189,6 +195,10 @@ class FeatureQuantifier:
                 if current_aln_group is not None:
                     self.process_alignment_group(current_aln_group)
                 current_aln_group = AlignmentGroup()
+                read_count += 1
+
+                if read_count and read_count % 100000 == 0:
+                    logger.info("Processed %s reads.", read_count)
 
             current_aln_group.add_alignment(aln)
 
@@ -199,23 +209,43 @@ class FeatureQuantifier:
             logger.warning("No alignments present in stream.")
 
         t1 = time.time()
-        logger.info("Processed %s alignments in %s.", aln_count, f"{t1 - t0:.3f}s")
+        logger.info("Processed %s alignments (%s reads) in %s.", aln_count, read_count, f"{t1 - t0:.3f}s")
 
-        return aln_count, 0, None
+        return aln_count, read_count, 0, None
 
-    def process_bamfile(self, bamfile, aln_format="sam", min_identity=None, min_seqlen=None):
+    def process_bamfile(self, bamfile, aln_format="sam", min_identity=None, min_seqlen=None, external_readcounts=None):
         """processes one bamfile"""
 
         self.alp = AlignmentProcessor(bamfile, aln_format)
 
-        aln_count, unannotated_ambig, _ = self.process_alignments(
+        aln_count, read_count, unannotated_ambig, _ = self.process_alignments(
             min_identity=min_identity, min_seqlen=min_seqlen
         )
 
         with gzip.open(f"{self.out_prefix}.aln_stats.txt.gz", "wt") as aln_stats_out:
             print(self.alp.get_alignment_stats_str(table=True), file=aln_stats_out)
 
+        # pylint: disable=W0703
+        # need to figure out what exceptions to catch...
         if aln_count:
-            self.process_counters(unannotated_ambig)
+            if external_readcounts is not None:
+                if os.path.isfile(external_readcounts):
+                    try:
+                        with open(external_readcounts, encoding="UTF-8") as json_in:
+                            read_count = json.load(json_in).get("n_reads")
+                        logger.info("Using pre-filter readcounts (%s).", read_count)
+                    except Exception as err:
+                        print(f"Error accessing readcounts: {err}")
+                        logger.warning(
+                            "Could not access pre-filter readcounts. Using post-filter readcounts(%s).",
+                            read_count
+                        )
+                else:
+                    read_count = int(external_readcounts)
+
+            self.process_counters(
+                unannotated_ambig,
+                aln_count=read_count
+            )
 
         logger.info("Finished.")

@@ -66,9 +66,20 @@ class FeatureCountCollator:
         merged_tab = pd.DataFrame(index=['unannotated'] + sorted(index.difference({'feature', 'unannotated'})))
         for sample, fn in files:
             src_tab = pd.read_csv(fn, sep="\t", index_col=0)
-            merged_tab = merged_tab.merge(src_tab[self.column], left_index=True, right_index=True, how="outer")
-            merged_tab.rename(columns={self.column: sample}, inplace=True)
-            merged_tab[sample]["unannotated"] = src_tab["uniq_raw"].get("unannotated", "NA")
+            colname = self.column
+            try:
+                column = src_tab[colname]
+            except KeyError:
+                colname = colname.replace("combined_", "uniq_")
+                try:
+                    column = src_tab[colname]
+                except KeyError as err:
+                    raise ValueError(f"Problem parsing file {fn}:\n{str(err)}") from err
+
+            merged_tab = merged_tab.merge(column, left_index=True, right_index=True, how="outer")
+            merged_tab.rename(columns={colname: sample}, inplace=True)
+            # merged_tab[sample]["unannotated"] = src_tab["uniq_raw"].get("unannotated", "NA")
+            merged_tab.loc["unannotated", sample] = src_tab["uniq_raw"].get("unannotated", "NA")
         merged_tab.to_csv(table_file, sep="\t", na_rep="NA", index_label="feature")
 
     def _collate_aln_stats(self, files):
@@ -87,7 +98,7 @@ def main():
     ap.add_argument("count_dir", type=str)
     ap.add_argument("--out_prefix", "-o", type=str, default="./collated")
     ap.add_argument("--recursive", "-r", action="store_true")
-    ap.add_argument("--column", "-c", type=str, choices=("uniq_raw", "uniq_lnorm", "uniq_scaled", "combined_raw", "combined_lnorm", "combined_scaled"), default="uniq_raw")
+    ap.add_argument("--column", "-c", type=str, choices=("uniq_raw", "uniq_lnorm", "uniq_scaled", "uniq_rpkm", "combined_raw", "combined_lnorm", "combined_scaled", "combined_rpkm"), default="uniq_raw")
     args = ap.parse_args()
 
     outdir = os.path.dirname(args.out_prefix)

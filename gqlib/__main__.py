@@ -8,8 +8,8 @@ import pathlib
 import sys
 
 # pylint: disable=W0611
-from gffquant.profilers import GeneQuantifier, RegionQuantifier
-from . import __version__
+from .profilers import GeneQuantifier, RegionQuantifier
+from . import __version__, __tool__
 from .handle_args import handle_args
 
 
@@ -20,7 +20,7 @@ def main():
 
     args = handle_args(sys.argv[1:])
 
-    logger.info("Version: %s", __version__)
+    logger.info("Version: %s %s", __tool__, __version__)
     logger.info("Command: %s %s", os.path.basename(sys.argv[0]), " ".join(sys.argv[1:]))
 
     if args.bam_file != "-" and not os.path.exists(args.bam_file):
@@ -58,7 +58,7 @@ def main():
         )
 
     fq.process_bamfile(
-        args.bam_file, aln_format=args.format, min_identity=args.min_identity, min_seqlen=args.min_seqlen
+        args.bam_file, aln_format=args.format, min_identity=args.min_identity, min_seqlen=args.min_seqlen, external_readcounts=args.import_readcounts,
     )
 
 
