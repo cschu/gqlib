@@ -6,11 +6,11 @@ import logging
 import textwrap
 
 from . import __version__
-
+from . import __tool__
 
 def handle_args(args):
 
-    log_ap = argparse.ArgumentParser(prog="gffquant", add_help=False)
+    log_ap = argparse.ArgumentParser(prog=__tool__, add_help=False)
     log_ap.add_argument("-l", "--log_level", type=int, choices=range(1, 5), default=logging.INFO)
     log_args, _ = log_ap.parse_known_args(args)
 
@@ -23,7 +23,7 @@ def handle_args(args):
         raise ValueError(f"Invalid log level: {log_args.log_level}") from invalid_loglevel_err
 
     ap = argparse.ArgumentParser(
-        prog="gffquant",
+        prog=__tool__,
         formatter_class=argparse.RawTextHelpFormatter,
         parents=(log_ap,),
     )
@@ -65,7 +65,7 @@ def handle_args(args):
         "--out_prefix",
         "-o",
         type=str,
-        default="gffquant",
+        default=__tool__,
         help="Prefix for output files.",
     )
     ap.add_argument(
@@ -78,7 +78,7 @@ def handle_args(args):
             Determines how ambiguous alignments should be treated. This setting mimics NGLess' behaviour.
             - 'unique_only' ignores any alignment flagged as ambiguous (MAPQ=0). This is the default setting.
             - 'all1' treats each alignment as unique (each ambiguous alignment contributes 1 count to features it aligns to.)
-            - 'primary_only' takes the unique alignments and the primary and alignment of each ambiguous read group.
+            - 'primary_only' takes the unique alignments and the primary alignment of each ambiguous read group.
             - '1overN' each alignment contributes 1/(n=number of ambiguous alignments of the same read) counts to features it aligns to."""
         ),
     )
@@ -131,6 +131,12 @@ def handle_args(args):
         "--unmarked_orphans",
         action="store_true",
         help="Ensure that alignments from unmarked orphan reads (from preprocessing) are properly accounted for.",
+    )
+
+    ap.add_argument(
+        "--import_readcounts",
+        type=int,
+        help="Import externally derived readcounts to allow readcount-based normalisation for prefiltered bam files.",
     )
 
     ap.add_argument(

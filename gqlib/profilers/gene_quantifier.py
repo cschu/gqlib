@@ -6,6 +6,7 @@ import logging
 
 from .feature_quantifier import FeatureQuantifier
 
+from .. import __tool__
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class GeneQuantifier(FeatureQuantifier):
     def __init__(
         self,
         db=None,
-        out_prefix="gffquant",
+        out_prefix=__tool__,
         ambig_mode="uniq_only",
         strand_specific=False,
         calc_coverage=False,
@@ -35,7 +36,7 @@ class GeneQuantifier(FeatureQuantifier):
         )
 
     def process_alignment_group(self, aln_group):
-        logger.info("Processing new alignment group %s (%s)", aln_group.qname, aln_group.n_align())
+        # logger.info("Processing new alignment group %s (%s)", aln_group.qname, aln_group.n_align())
         ambig_counts = aln_group.get_ambig_align_counts()
         if any(ambig_counts) and self.require_ambig_bookkeeping:
             for aln in aln_group.get_alignments():

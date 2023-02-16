@@ -49,6 +49,26 @@ EMAPPER_FORMATS = {
             "COG_Functional_Category",
         ),
     ),
+    "v2.1.2": EmapperFormat(
+        0,
+        (4, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,),
+        (
+            "eggNOG_OGs",
+            "COG_cat",
+            "GOs",
+            "EC",
+            "KEGG_ko",
+            "KEGG_Pathway",
+            "KEGG_Module",
+            "KEGG_Reaction",
+            "KEGG_rclass",
+            "BRITE",
+            "KEGG_TC",
+            "CAZy",
+            "BiGG_Reaction",
+            "PFAMs",
+        ),
+    ),
 }
 
 

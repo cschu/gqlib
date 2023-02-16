@@ -1,9 +1,9 @@
 # pylint: disable=R0914,C0103
-# pylint: disable=R0801
+# pylint: disable=duplicate-code
+
 """ module docstring """
 
 import argparse
-import csv
 import gzip
 import json
 import logging
@@ -12,8 +12,9 @@ import sqlite3
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from gffquant.db import initialise_db
-from gffquant.db.models import db
+from ..db import initialise_db
+from ..db.models import db
+from ..db.gff_dbm import GffDatabaseManager
 from ..db.models.meta import Base
 
 
@@ -45,15 +46,12 @@ def gather_category_and_feature_data(args, db_session=None):
     cat_d = {}
 
     logging.info("First pass: gathering category and feature information.")
-    gz_magic = b"\x1f\x8b\x08"
-    # pylint: disable=R1732,W0511
-    gzipped = open(args.input_data, "rb").read(3).startswith(gz_magic)
-    _open = gzip.open if gzipped else open
+    gffdbm = GffDatabaseManager(args.input_data, "genes", emapper_version=args.emapper_version)
 
     n = 0
-    with _open(args.input_data, "rt") as _in:
-        for n, row in enumerate(csv.DictReader(_in), start=1):
-            cat_d.setdefault("domain", set()).update(row["family"].split(","))
+    for n, (_, region_annotation) in enumerate(gffdbm.iterate(bufsize=4000000000), start=1):
+        for category, features in region_annotation[1:]:
+            cat_d.setdefault(category, set()).update(features)
 
     logging.info("    Parsed %s entries.", n)
 
@@ -63,6 +61,7 @@ def gather_category_and_feature_data(args, db_session=None):
 
     with gzip.open(args.db_path + ".code_map.json.gz", "wt") as _map_out:
         for category, features in sorted(cat_d.items()):
+            features.difference_update({"-"})
             code_map[category] = {
                 "key": len(code_map),
                 "features": {
@@ -89,49 +88,35 @@ def gather_category_and_feature_data(args, db_session=None):
     return code_map, n
 
 
-def process_annotations(input_data, db_session, code_map, nseqs):
+def process_annotations(input_data, db_session, code_map, nseqs, emapper_version):
     logging.info("Second pass: Encoding sequence annotations")
+    gffdbm = GffDatabaseManager(input_data, "genes", emapper_version=emapper_version)
+    for i, (ref, region_annotation) in enumerate(gffdbm.iterate(bufsize=4000000000), start=1):
+        if i % 10000 == 0:
+            db_session.commit()
 
-    gz_magic = b"\x1f\x8b\x08"
-    # pylint: disable=R1732,W0511
-    gzipped = open(input_data, "rb").read(3).startswith(gz_magic)
-    _open = gzip.open if gzipped else open
-
-    d = {}
-    with _open(input_data, "rt") as _in:
-        for i, row in enumerate(csv.DictReader(_in), start=1):
-            if i % 10000 == 0:
-                db_session.commit()
-
-            # gid, start, end, features = line
-            # features = features.split(",")
-            gid, start, end, features = row["sequenceID"], row["start"], row["end"], row["family"]
-
-            d.setdefault((gid, start, end), set()).update(features.split(","))
-
-        for i, ((gid, start, end), features) in enumerate(d.items(), start=1):
             if nseqs is not None:
                 logging.info("Processed %s entries. (%s%%)", i, round(i / nseqs * 100, 3))
             else:
                 logging.info("Processed %s entries.", str(i))
 
-            encoded = []
-            enc_category = code_map["domain"]['key']
-            enc_features = sorted(code_map["domain"]['features'][feature] for feature in features)
+        encoded = []
+        for category, features in region_annotation[1:]:
+            features = set(features).difference({"-"})
+            enc_category = code_map[category]['key']
+            enc_features = sorted(code_map[category]['features'][feature] for feature in features)
             encoded.append((enc_category, ",".join(map(str, enc_features))))
-            encoded = ";".join(f"{cat}={features}" for cat, features in sorted(encoded))
+        encoded = ";".join(f"{cat}={features}" for cat, features in sorted(encoded))
 
-            db_sequence = db.AnnotatedSequence(
-                seqid=gid,
-                featureid=None,
-                start=int(start),
-                end=int(end),
-                annotation_str=encoded,
-            )
-
-            db_session.add(db_sequence)
-
-        db_session.commit()
+        _, strand = region_annotation[0]
+        db_sequence = db.AnnotatedSequence(
+            seqid=ref,
+            featureid=None,
+            strand=int(strand == "+") if strand is not None else None,
+            annotation_str=encoded
+        )
+        db_session.add(db_sequence)
+    db_session.commit()
 
 
 def main():
@@ -142,6 +127,12 @@ def main():
     ap.add_argument("--code_map", type=str)
     ap.add_argument("--nseqs", type=int)
     ap.add_argument("--extract_map_only", action="store_true")
+    ap.add_argument(
+        "--emapper_version",
+        type=str,
+        default="v2",
+        choices=("v1", "v2", "v2.1.2"),
+    )
     args = ap.parse_args()
 
     engine, db_session = get_database(args.db_path) if not args.extract_map_only else (None, None)
@@ -159,7 +150,7 @@ def main():
     if args.extract_map_only:
         return
 
-    process_annotations(args.input_data, db_session, code_map, nseqs)
+    process_annotations(args.input_data, db_session, code_map, nseqs, args.emapper_version)
 
     # https://www.sqlite.org/wal.html
     # https://stackoverflow.com/questions/10325683/can-i-read-and-write-to-a-sqlite-database-concurrently-from-multiple-connections

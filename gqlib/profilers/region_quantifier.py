@@ -4,9 +4,10 @@
 
 import logging
 
-from gffquant.db.annotation_db import AnnotationDatabaseManager
+from ..db.annotation_db import AnnotationDatabaseManager
 from .feature_quantifier import FeatureQuantifier
 
+from .. import __tool__
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class RegionQuantifier(FeatureQuantifier):
     def __init__(
         self,
         db=None,
-        out_prefix="gffquant",
+        out_prefix=__tool__,
         ambig_mode="uniq_only",
         strand_specific=False,
         calc_coverage=False,
@@ -35,10 +36,10 @@ class RegionQuantifier(FeatureQuantifier):
             paired_end_count=paired_end_count,
             unmarked_orphans=unmarked_orphans,
         )
-        self.adm = AnnotationDatabaseManager(self.db)
+        self.adm = AnnotationDatabaseManager.from_db(self.db)
 
     def process_alignment_group(self, aln_group):
-        logger.info("Processing new alignment group %s (%s)", aln_group.qname, aln_group.n_align())
+        # logger.info("Processing new alignment group %s (%s)", aln_group.qname, aln_group.n_align())
         ambig_counts = list(aln_group.get_ambig_align_counts())
         if any(ambig_counts) and self.require_ambig_bookkeeping:
             all_hits = []

@@ -145,7 +145,8 @@ class CountAnnotator(dict):
         ambig_counts,
         length,
         strand_specific_counts=None,
-        region_counts=False
+        region_counts=False,
+        coverage_counts=False,
     ):
         """Computes a count vector for a region."""
         # we have either 4 bins (unstranded) or 12 (strand-specific)
@@ -163,18 +164,19 @@ class CountAnnotator(dict):
             counts[6:8] += ambig_counts[ss_counts]
             counts[10:12] += ambig_counts[as_counts]
 
-        # counts[0:4] are unstranded
+        # the first 4 elements (counts[0:4]) are unstranded:
         # uniq_raw, uniq_norm, combined_raw, combined_norm
-        if region_counts:
+        # 1. each of these fields gets a copy of the unique count sum
+        # 2. add the ambiguous counts to the combined_ elements
+
+        if region_counts and coverage_counts:
             counts[0:4] = sum(x[2] for x in chain(*uniq_counts) if x is not None)
+            counts[2:4] += sum(x[2] for x in chain(*ambig_counts) if x is not None)
         else:
             counts[0:4] = sum(uniq_counts)
-        # add the ambig counts to combined_raw, combined_norm
-        if region_counts:
-            counts += sum(x[2] for x in chain(*ambig_counts) if x is not None)
-        else:
             counts[2:4] += sum(ambig_counts)
-        # all odd elements are length-normalised
+
+        # 3. all odd elements (including strand-specific) are length-normalised
         counts[1::2] /= float(length)
 
         return counts
@@ -205,7 +207,7 @@ class RegionCountAnnotator(CountAnnotator):
                     (start, end), rev_strand = region
                 else:
                     (start, end), rev_strand = region, None
-                # region_annotation is a tuple of key-value pairs:
+                # the region_annotation is a tuple of key-value pairs:
                 # (strand, func_category1: subcategories, func_category2: subcategories, ...)
                 # the first is the strand, the second is the gene id, the rest are the features
 
@@ -236,16 +238,19 @@ class RegionCountAnnotator(CountAnnotator):
                     else:
                         strand_specific_counts = None
 
+                    calc_coverage = coverage_counter is not None and (uniq_counts or ambig_counts)
+
                     region_length = end - start + 1
                     counts = self.compute_count_vector(
                         uniq_counts,
                         ambig_counts,
                         region_length,
                         strand_specific_counts=strand_specific_counts,
-                        region_counts=True
+                        region_counts=True,
+                        coverage_counts=calc_coverage,
                     )
 
-                    if coverage_counter is not None and (uniq_counts or ambig_counts):
+                    if calc_coverage:
                         coverage_counter.update_coverage(rid, start, end, uniq_counts, ambig_counts, region_annotation)
 
                     self.distribute_feature_counts(counts, region_annotation)
