@@ -8,6 +8,7 @@ import textwrap
 from . import __version__
 from . import __tool__
 
+
 def handle_args(args):
 
     log_ap = argparse.ArgumentParser(prog=__tool__, add_help=False)

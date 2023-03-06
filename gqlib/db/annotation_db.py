@@ -13,6 +13,7 @@ from . import get_database
 from .models import db
 from .db_import import GqDatabaseImporter
 
+
 logger = logging.getLogger(__name__)
 
 
