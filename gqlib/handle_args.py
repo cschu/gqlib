@@ -92,12 +92,6 @@ def handle_args(args):
     )
 
     ap.add_argument(
-        "--calc_coverage",
-        action="store_true",
-        help="Perform coverage calculations."
-    )
-
-    ap.add_argument(
         "--min_identity",
         type=float,
         default=0.97,
@@ -138,6 +132,13 @@ def handle_args(args):
         "--import_readcounts",
         type=int,
         help="Import externally derived readcounts to allow readcount-based normalisation for prefiltered bam files.",
+    )
+
+    ap.add_argument(
+        "--restrict_metrics",
+        type=str,
+        help="Restrict reported metrics. Comma-separated list of `raw`, `lnorm`, `scaled`, `rpkm`.",
+        default="raw,lnorm,scaled",
     )
 
     ap.add_argument(

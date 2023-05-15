@@ -41,24 +41,23 @@ class CountManager:
         distribution_mode="1overN",
         region_counts=True,
         strand_specific=False,
-        calc_coverage=False,
         paired_end_count=1,
     ):
         self.distribution_mode = distribution_mode
         self.strand_specific = strand_specific
-        self.calc_coverage = calc_coverage
-        self.increments = [1.0, 1.0]
         self.paired_end_count = paired_end_count
+        self.increments = [1.0, 1.0]
+        self.increments_auto_detect = [1.0, self.paired_end_count / 2.0]
+
 
         self.uniq_seqcounts, self.ambig_seqcounts = None, None
         self.uniq_regioncounts, self.ambig_regioncounts = None, None
 
         if region_counts:
-            self.uniq_regioncounts = UniqueRegionCounter(strand_specific=strand_specific, calc_coverage=calc_coverage)
+            self.uniq_regioncounts = UniqueRegionCounter(strand_specific=strand_specific)
             self.ambig_regioncounts = AmbiguousRegionCounter(
                 strand_specific=strand_specific,
                 distribution_mode=distribution_mode,
-                calc_coverage=calc_coverage
             )
 
         else:
@@ -71,14 +70,17 @@ class CountManager:
     def has_ambig_counts(self):
         return self.ambig_regioncounts or self.ambig_seqcounts
 
-    def update_counts(self, count_stream, ambiguous_counts=False, pair=False):
+    def update_counts(self, count_stream, ambiguous_counts=False, pair=False, pe_library=False):
         seq_counter, region_counter = (
             (self.uniq_seqcounts, self.uniq_regioncounts)
             if not ambiguous_counts
             else (self.ambig_seqcounts, self.ambig_regioncounts)
         )
 
-        increment = self.increments[pair]
+        if pe_library is not None:
+            increment = self.increments_auto_detect[pe_library]
+        else:
+            increment = self.increments[pair]
 
         if seq_counter is not None:
             seq_counter.update_counts(count_stream, increment=increment)
@@ -112,14 +114,12 @@ class CountManager:
     def get_counts(self, seqid, region_counts=False, strand_specific=False):
         if region_counts:
             rid, seqid = seqid[0], seqid[1:]
-            uniq_counter = self.uniq_regioncounts.get(rid, {} if self.calc_coverage else Counter())
-            ambig_counter = self.ambig_regioncounts.get(rid, {} if self.calc_coverage else Counter())
+            uniq_counter = self.uniq_regioncounts.get(rid, Counter())
+            ambig_counter = self.ambig_regioncounts.get(rid, Counter())
 
             # pylint: disable=R1720
             if strand_specific:
                 raise NotImplementedError
-            elif self.calc_coverage:
-                return [uniq_counter.get(seqid, [])], [ambig_counter.get(seqid, [])]
             else:
                 return [uniq_counter[seqid]], [ambig_counter[seqid]]
 

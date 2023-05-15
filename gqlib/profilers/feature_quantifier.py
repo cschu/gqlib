@@ -13,7 +13,6 @@ from collections import Counter
 
 from ..alignment import AlignmentGroup, AlignmentProcessor, SamFlags
 from ..annotation import GeneCountAnnotator, RegionCountAnnotator, CountWriter
-from ..counters.coverage_counter import CoverageCounter
 from ..counters import CountManager
 from ..db.annotation_db import AnnotationDatabaseManager
 
@@ -34,7 +33,6 @@ class FeatureQuantifier(ABC):
         ambig_mode="unique_only",
         reference_type="genome",
         strand_specific=False,
-        calc_coverage=False,
         paired_end_count=1,
     ):
         self.aln_counter = Counter()
@@ -46,7 +44,6 @@ class FeatureQuantifier(ABC):
             distribution_mode=ambig_mode,
             region_counts=reference_type in ("genome", "domain"),
             strand_specific=strand_specific and reference_type not in ("genome", "domain"),
-            calc_coverage=calc_coverage,
             paired_end_count=paired_end_count,
         )
         self.out_prefix = out_prefix
@@ -55,7 +52,6 @@ class FeatureQuantifier(ABC):
         self.alp = None
         self.reference_manager = {}
         self.strand_specific = strand_specific
-        self.calc_coverage = calc_coverage
 
     def allow_ambiguous_alignments(self):
         """All distribution modes support ambiguous alignments,
@@ -105,20 +101,13 @@ class FeatureQuantifier(ABC):
             if self.do_overlap_detection:
 
                 hits = {
-                    (sstart, send, rev_strand, cstart, cend)
-                    for (sstart, send), (cstart, cend)
+                    (sstart, send, rev_strand, None, None)
+                    for (sstart, send)
                     in self.adm.get_overlaps(
                         ref, start, end,
                         domain_mode=self.reference_type == "domain",
-                        calc_coverage=self.calc_coverage,
                     )
                 }
-
-                # overlaps, coverage = self.adm.get_overlaps(ref, start, end)
-                # hits = {
-                #     (ovl.begin, ovl.end, rev_strand, cstart, cend)
-                #     for ovl, (cstart, cend) in zip(overlaps, coverage)
-                # }
 
                 # if the alignment overlaps multiple features, each one gets a count
                 aln_count = int(bool(hits)) * aln_count
@@ -131,8 +120,6 @@ class FeatureQuantifier(ABC):
 
     def process_counters(
         self,
-        unannotated_ambig,
-        aln_count,
         restrict_reports=None,
         report_category=True,
         report_unannotated=True,
@@ -144,31 +131,26 @@ class FeatureQuantifier(ABC):
         if dump_counters:
             self.count_manager.dump_raw_counters(self.out_prefix, self.reference_manager)
 
-        cov_ctr = CoverageCounter() if self.calc_coverage else None
-
         report_scaling_factors = restrict_reports is None or "scaled" in restrict_reports
 
-        if self.do_overlap_detection:
-            count_annotator = RegionCountAnnotator(self.strand_specific, report_scaling_factors=report_scaling_factors)
-            count_annotator.annotate(self.reference_manager, self.adm, self.count_manager, coverage_counter=cov_ctr)
-        else:
-            count_annotator = GeneCountAnnotator(self.strand_specific, report_scaling_factors=report_scaling_factors)
-            count_annotator.annotate(self.reference_manager, self.adm, self.count_manager)
+        annotator_type = (GeneCountAnnotator, RegionCountAnnotator)[self.do_overlap_detection]
+        count_annotator = annotator_type(self.strand_specific, report_scaling_factors=report_scaling_factors)
+        count_annotator.annotate(self.reference_manager, self.adm, self.count_manager)
 
         count_writer = CountWriter(
             self.out_prefix,
-            aln_count,
             has_ambig_counts=self.count_manager.has_ambig_counts(),
             strand_specific=self.strand_specific,
             restrict_reports=restrict_reports,
             report_category=report_category,
-            report_unannotated=report_unannotated,
+            total_readcount=self.aln_counter["read_count"],
+            filtered_readcount=self.aln_counter["filtered_read_count"],
         )
 
         count_writer.write_feature_counts(
             self.adm,
-            self.count_manager.get_unannotated_reads() + unannotated_ambig,
             count_annotator,
+            (None, self.count_manager.get_unannotated_reads() + self.aln_counter["unannotated_ambig"])[report_unannotated],
         )
 
         count_writer.write_gene_counts(
@@ -176,10 +158,6 @@ class FeatureQuantifier(ABC):
             count_annotator.scaling_factors["total_gene_uniq"],
             count_annotator.scaling_factors["total_gene_ambi"]
         )
-
-        if self.calc_coverage:
-            cov_ctr.dump(self.out_prefix)
-            count_writer.write_coverage(self.adm, cov_ctr)
 
         self.adm.clear_caches()
 
@@ -257,7 +235,7 @@ class FeatureQuantifier(ABC):
             except Exception as err:
                 print(f"Error accessing readcounts: {err}")
                 logger.warning(
-                    "Could not access pre-filter readcounts. Using post-filter readcounts (%s).",
+                    "Could not access pre-filter readcounts. Using post-filter readcounts (%s).\nThis should result in an alignment-rate of 100%.",
                     read_count
                 )
         else:
@@ -285,6 +263,10 @@ class FeatureQuantifier(ABC):
         )
 
         full_readcount, read_count, filtered_readcount = aln_reader.read_counter
+
+        if external_readcounts is not None:
+            full_readcount = external_readcounts
+            # FeatureQuantifier.get_readcount(full_read_count, external_readcounts)
 
         self.aln_counter.update(
             {
@@ -321,8 +303,6 @@ class FeatureQuantifier(ABC):
 
         if self.aln_counter.get("aln_count"):
             self.process_counters(
-                self.aln_counter["unannotated_ambig"],
-                aln_count=self.aln_counter["read_count"],
                 restrict_reports=restrict_reports,
                 report_category=report_category,
                 report_unannotated=report_unannotated,

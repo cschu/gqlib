@@ -44,6 +44,7 @@ class CountAnnotator(dict):
         # [uniq_raw, uniq_normed, combined_raw, combined_normed]
         self.total_counts = np.zeros(4)
         self.total_gene_counts = np.zeros(4)
+        self.unannotated_counts = np.zeros(4)
         # holds total_counts-like vectors for feature-wise scaling factor calculation
         self.feature_count_sums = {}
         self.scaling_factors = {}
@@ -71,7 +72,11 @@ class CountAnnotator(dict):
             for feature in category_counts:
                 self.add_counts(category, feature, counts)
 
-            self.add_counts(category, f"cat:::{category}", counts)
+            if category_counts:
+                # eggnog-mapper annotation tables in v2.1.2 (maybe earlier?) have '-' instead of empty cells
+                # category counts may be empty in case a non-patched db based on such tables is used
+                # in that case we're adding counts of non-existing features to the category without checking for empty cat counts!
+                self.add_counts(category, f"cat:::{category}", counts)
 
     def add_counts(self, category, feature, counts):
         """ Increments feature counts by input count vector """
@@ -148,7 +153,6 @@ class CountAnnotator(dict):
         length,
         strand_specific_counts=None,
         region_counts=False,
-        coverage_counts=False,
     ):
         """Computes a count vector for a region."""
         # we have either 4 bins (unstranded) or 12 (strand-specific)
@@ -171,7 +175,8 @@ class CountAnnotator(dict):
         # 1. each of these fields gets a copy of the unique count sum
         # 2. add the ambiguous counts to the combined_ elements
 
-        if region_counts and coverage_counts:
+        if region_counts and False:
+            # used to ask for region_counts and coverage_counts
             counts[0:4] = sum(x[2] for x in chain(*uniq_counts) if x is not None)
             counts[2:4] += sum(x[2] for x in chain(*ambig_counts) if x is not None)
         else:
@@ -191,7 +196,7 @@ class RegionCountAnnotator(CountAnnotator):
         CountAnnotator.__init__(self, strand_specific, report_scaling_factors=report_scaling_factors)
 
     # pylint: disable=R0914
-    def annotate(self, refmgr, db, count_manager, coverage_counter=None):
+    def annotate(self, refmgr, db, count_manager):
         """
         Annotate a set of region counts via db-lookup.
         input:
@@ -240,8 +245,6 @@ class RegionCountAnnotator(CountAnnotator):
                     else:
                         strand_specific_counts = None
 
-                    calc_coverage = coverage_counter is not None and (uniq_counts or ambig_counts)
-
                     region_length = end - start + 1
                     counts = self.compute_count_vector(
                         uniq_counts,
@@ -249,11 +252,7 @@ class RegionCountAnnotator(CountAnnotator):
                         region_length,
                         strand_specific_counts=strand_specific_counts,
                         region_counts=True,
-                        coverage_counts=calc_coverage,
                     )
-
-                    if calc_coverage:
-                        coverage_counter.update_coverage(rid, start, end, uniq_counts, ambig_counts, region_annotation)
 
                     self.distribute_feature_counts(counts, region_annotation)
 
@@ -309,5 +308,7 @@ class GeneCountAnnotator(CountAnnotator):
             if region_annotation is not None:
                 _, _, region_annotation = region_annotation
                 self.distribute_feature_counts(counts, region_annotation)
+            else:
+                self.unannotated_counts += counts[:4]
 
         self.calculate_scaling_factors()

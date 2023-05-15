@@ -4,7 +4,7 @@
 
 import logging
 
-from ..db.annotation_db import AnnotationDatabaseManager
+from gffquant.db.annotation_db import AnnotationDatabaseManager
 from .feature_quantifier import FeatureQuantifier
 
 from .. import __tool__
@@ -20,7 +20,6 @@ class RegionQuantifier(FeatureQuantifier):
         out_prefix=__tool__,
         ambig_mode="uniq_only",
         strand_specific=False,
-        calc_coverage=False,
         paired_end_count=1,
         reference_type="genome",
     ):
@@ -31,7 +30,6 @@ class RegionQuantifier(FeatureQuantifier):
             ambig_mode=ambig_mode,
             strand_specific=strand_specific,
             reference_type=reference_type,
-            calc_coverage=calc_coverage,
             paired_end_count=paired_end_count,
         )
 
@@ -64,7 +62,8 @@ class RegionQuantifier(FeatureQuantifier):
                     for aln, hit, unaligned in all_hits
                 ),
                 ambiguous_counts=True,
-                pair=aln_group.is_paired()
+                pair=aln_group.is_paired(),
+                pe_library=aln_group.pe_library,
             )
         elif aln_group.is_aligned_pair():
             current_ref = self.register_reference(aln_group.primaries[0].rid, aln_reader)
@@ -76,7 +75,7 @@ class RegionQuantifier(FeatureQuantifier):
                 )
             )
             self.count_manager.update_counts(
-                hits, ambiguous_counts=False, pair=True
+                hits, ambiguous_counts=False, pair=True, pe_library=aln_group.pe_library,
             )
         else:
             for aln in aln_group.get_alignments():
@@ -86,5 +85,6 @@ class RegionQuantifier(FeatureQuantifier):
                 )
                 self.count_manager.update_counts(
                     hits, ambiguous_counts=not aln.is_unique(),
-                    pair=aln_group.is_paired()
+                    pair=aln_group.is_paired(),
+                    pe_library=aln_group.pe_library,
                 )
