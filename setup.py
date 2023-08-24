@@ -38,7 +38,6 @@ with open(path.join(here, "DESCRIPTION.md"), encoding="utf-8") as description:
 			"Programming Language :: Python :: 3.8",
 			"Programming Language :: Python :: 3.9",
 			"Programming Language :: Python :: 3.10",
-			"Programming Language :: Python :: 3.11",
 		],
 		zip_safe=False,
 		keywords="large reference data genomic feature quantification",
