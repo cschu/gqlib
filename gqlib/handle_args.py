@@ -9,26 +9,10 @@ import textwrap
 from . import __version__
 from . import __tool__
 
+from .ui.validation import check_bwa_index, check_minimap2_index
+
 
 logger = logging.getLogger(__name__)
-
-
-"""
-def gq_output = "-o profiles/${sample}/${sample}"
-
-			def gq_params = "-m ${params.gq_mode} --ambig_mode ${params.gq_ambig_mode}"
-			gq_params += (params.gq_strand_specific) ? " --strand_specific" : ""
-			gq_params += (params.gq_min_seqlen) ? (" --min_seqlen " + params.gq_min_seqlen) : ""
-			gq_params += (params.gq_min_identity) ? (" --min_identity " + params.gq_min_identity) : ""
-			gq_params += (params.gq_restrict_metrics) ? " --restrict_metrics ${params.gq_restrict_metrics}" : ""
-	
-			def gq_cmd = "gffquant ${gq_output} ${gq_params} --db gq_db.sqlite3 --reference ${reference} --aligner ${params.gq_aligner} --fastq *.fastq.gz"
-"""
-def check_bwa_index(prefix):
-    """ docstring """
-    suffixes = (".amb", ".ann", ".bwt", ".pac", ".sa")
-    return all(os.path.isfile(prefix + suffix) for suffix in suffixes)
-
 
 
 def validate_args(args):
@@ -37,7 +21,7 @@ def validate_args(args):
 
     if not os.path.isfile(args.annotation_db):
         raise ValueError(f"Cannot find annotation db at `{args.annotation_db}`.")
-    if (args.aligner == "bwa" and not check_bwa_index(args.reference)) or (args.aligner == "minimap" and False):
+    if (args.aligner == "bwa" and not check_bwa_index(args.reference)) or (args.aligner == "minimap" and not check_minimap2_index(args.reference)):
         raise ValueError(f"Cannot find reference index at `{args.reference}`.")
     
     has_fastq = any(
@@ -54,18 +38,6 @@ def validate_args(args):
 
     args.input_type = "fastq" if has_fastq else ("bam" if args.bam else "sam")
 
-    # args.input_files = []
-    # for input_type in ("bam", "sam", "fastq"):
-    #     args.input_files = args.input_files or getattr(args, input_type)
-    #     if args.input_files:
-    #         args.input_type = input_type
-    #         break
-    # for f in args.input_files:
-    #     if f != "-" and not os.path.isfile(f):
-    #         raise ValueError(f"Cannot find input file {f}")
-
-
-    
     if (args.reference or args.aligner) and not has_fastq:
         raise ValueError(f"--reference/--aligner are not needed with alignment input (bam, sam).")
     if bool(args.reference and args.aligner) != has_fastq:
@@ -82,8 +54,6 @@ def validate_args(args):
         raise ValueError(f"Output directory exists {os.path.dirname(args.out_prefix)}. Specify -f to overwrite.")
 
     return args
-    
-    
 
 
 def handle_args(args):
@@ -168,10 +138,10 @@ def handle_args(args):
     ap.add_argument(
         "--bam",
         type=str,
-        nargs="+",
+        # nargs="+",
         help=textwrap.dedent(
             """\
-            Path to one or more name-sorted BAM file(s). Ambiguous alignments need to be flagged as secondary
+            Path to a name-sorted BAM file. Ambiguous alignments need to be flagged as secondary
             alignments with the same read id as their primary alignment.
             (e.g. output from BWA mem -a). All alignments of an ambiguous group need to have MAPQ=0.
             Input from STDIN can be specified with '-'."""
@@ -180,24 +150,16 @@ def handle_args(args):
     ap.add_argument(
         "--sam",
         type=str,
-        nargs="+",
+        # nargs="+",
         help=textwrap.dedent(
             """\
-            Path to one or more name-sorted SAM file(s). Ambiguous alignments need to be flagged as secondary
+            Path to a name-sorted SAM file. Ambiguous alignments need to be flagged as secondary
             alignments with the same read id as their primary alignment.
             (e.g. output from BWA mem -a). All alignments of an ambiguous group need to have MAPQ=0.
             Input from STDIN can be specified with '-'."""
         ),
     )
-    # ap.add_argument(
-    #     "--fastq",
-    #     type=str,
-    #     nargs="+",
-    #     help=textwrap.dedent(
-    #         """\
-    #         Path to one or more fastq file(s). Input from STDIN can be specified with '-'."""
-    #     ),
-    # )
+
     ap.add_argument(
         "--fastq-r1",
         dest="reads1",
@@ -294,7 +256,7 @@ def handle_args(args):
         help="Paired-end count contribution: 0.5 / mate (1) or 1 / mate (2) [1]",
     )
 
-    # orphan reads will not have flag 0x1 set
+    # orphan reads will not have flag 0x1 set, hence will be wrongly recognised as actual single-end reads
     ap.add_argument(
         "--unmarked_orphans",
         action="store_true",
