@@ -53,7 +53,7 @@ def validate_args(args):
     if os.path.isdir(os.path.dirname(args.out_prefix)) and not args.force_overwrite:
         raise ValueError(f"Output directory exists {os.path.dirname(args.out_prefix)}. Specify -f to overwrite.")
 
-    return args
+    return args    
 
 
 def handle_args(args):
@@ -159,7 +159,7 @@ def handle_args(args):
             Input from STDIN can be specified with '-'."""
         ),
     )
-
+    
     ap.add_argument(
         "--fastq-r1",
         dest="reads1",
@@ -246,7 +246,7 @@ def handle_args(args):
         type=int,
         default=45,
         help="Minimum read length [bp] for an alignment to be considered.",
-    )
+    )    
 
     ap.add_argument(
         "--paired_end_count",
@@ -256,7 +256,7 @@ def handle_args(args):
         help="Paired-end count contribution: 0.5 / mate (1) or 1 / mate (2) [1]",
     )
 
-    # orphan reads will not have flag 0x1 set, hence will be wrongly recognised as actual single-end reads
+    # orphan reads will not have flag 0x1 set
     ap.add_argument(
         "--unmarked_orphans",
         action="store_true",

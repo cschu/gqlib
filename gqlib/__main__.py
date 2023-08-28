@@ -5,15 +5,14 @@
 import logging
 import os
 import pathlib
-import subprocess
 import sys
 
 # pylint: disable=W0611
 from .db.db_import import DomainBedDatabaseImporter
 from .handle_args import handle_args
+from .ui.validation import check_input_reads
 from .profilers import GeneQuantifier, RegionQuantifier
 from .runners.alignment_runner import BwaMemRunner, Minimap2Runner
-from .ui.validation import check_input_reads
 from . import __version__
 
 
@@ -72,7 +71,7 @@ def main():
             args.cpus_for_alignment,
             args.reference,
             sample_id=os.path.basename(args.out_prefix),
-        )
+        )        
 
         for input_type, *reads in input_data:
 
