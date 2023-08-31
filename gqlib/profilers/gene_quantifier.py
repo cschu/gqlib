@@ -62,5 +62,8 @@ class GeneQuantifier(FeatureQuantifier):
                     current_ref, (aln.shorten(),)
                 )
                 self.count_manager.update_counts(
-                    hits, ambiguous_counts=not aln.is_unique(), pair=aln_group.is_paired(), pe_library=aln_group.pe_library,
+                    hits,
+                    ambiguous_counts=not aln.is_unique(),
+                    pair=aln_group.is_paired(),
+                    pe_library=aln_group.pe_library,
                 )

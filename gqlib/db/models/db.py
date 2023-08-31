@@ -62,4 +62,3 @@ class Observation(Base):
     sample_id = Column(Integer, ForeignKey("sample.id"))
 
     sample = relationship("Sample", back_populates="observations")
-

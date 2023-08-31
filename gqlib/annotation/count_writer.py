@@ -107,6 +107,7 @@ class CountWriter:
     def write_row(header, data, stream=sys.stdout):
         print(header, *(f"{c:.5f}" for c in data), flush=True, sep="\t", file=stream)
 
+    # pylint: disable=R0914
     def write_feature_counts(self, db, featcounts, unannotated_reads=None):
         for category_id, counts in sorted(featcounts.items()):
             scaling_factor, ambig_scaling_factor = featcounts.scaling_factors[
