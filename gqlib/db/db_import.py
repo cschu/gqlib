@@ -128,9 +128,21 @@ class GqDatabaseImporter(ABC):
 
 # class DomainBedDatabaseImporter(GqDatabaseImporter):
 class SmallDatabaseImporter(GqDatabaseImporter):
-    def __init__(self, logger, input_data, db_path=None, db_session=None, single_category="domain", sep="\t"):
+    def __init__(
+        self,
+        logger,
+        input_data,
+        db_path=None,
+        db_session=None,
+        single_category="domain",
+        sep="\t",
+        coords="bed",
+    ):
         self.single_category = single_category
         self.sep = sep
+        # we store everything as 1-based, closed intervals internally
+        self.coordinate_modifiers = (1, -1) if coords == "bed" else (0, 0)
+
         super().__init__(logger, input_data, db_path=db_path, db_session=db_session)
 
     def parse_categories(self, _in):
@@ -150,6 +162,10 @@ class SmallDatabaseImporter(GqDatabaseImporter):
                 self.db_session.commit()
             line = line.strip().split(self.sep)
             gid, start, end, features = line
-            annotations.setdefault((gid, int(start) + 1, int(end)), set()).update(features.split(","))
+            # we store everything as 1-based, closed intervals internally
+            start = int(start) + self.coordinate_modifiers[0]
+            end = int(end) + self.coordinate_modifiers[1]
+            # was: start + 1
+            annotations.setdefault((gid, start, end), set()).update(features.split(","))
 
         return annotations
