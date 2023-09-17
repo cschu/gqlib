@@ -141,7 +141,10 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         self.single_category = single_category
         self.sep = sep
         # we store everything as 1-based, closed intervals internally
-        self.coordinate_modifiers = (1, -1) if coords == "bed" else (0, 0)
+        # bed coords coming in as [x,y)_0 -> [x+1, y]_1
+        self.coordinate_modifiers = (1, 0) if coords == "bed" else (0, 0)
+        self.cols = (0,1,2,3) if coords == "bed" else (0,1,2,4)
+        # GMGC10.000_000_128.UNKNOWN,1,420,4.958096936477401e-50,GH88,417
 
         super().__init__(logger, input_data, db_path=db_path, db_session=db_session)
 
@@ -150,7 +153,7 @@ class SmallDatabaseImporter(GqDatabaseImporter):
 
         for self.nseqs, line in enumerate(_in, start=1):
             line = line.strip().split(self.sep)
-            categories.setdefault(self.single_category, set()).update(line[3].split(","))
+            categories.setdefault(self.single_category, set()).update(line[self.cols[-1]].split(","))
 
         self.logger.info("    Parsed %s entries.", self.nseqs)
         return categories
@@ -161,7 +164,7 @@ class SmallDatabaseImporter(GqDatabaseImporter):
             if i % 10000 == 0 and self.db_session:
                 self.db_session.commit()
             line = line.strip().split(self.sep)
-            gid, start, end, features = line
+            gid, start, end, features = (c for i, c in enumerate(line) if i in self.cols)
             # we store everything as 1-based, closed intervals internally
             start = int(start) + self.coordinate_modifiers[0]
             end = int(end) + self.coordinate_modifiers[1]
