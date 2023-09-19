@@ -142,8 +142,19 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         self.sep = sep
         # we store everything as 1-based, closed intervals internally
         # bed coords coming in as [x,y)_0 -> [x+1, y]_1
-        self.coordinate_modifiers = (1, 0) if coords == "bed" else (0, 0)
-        self.cols = (0,1,2,3) if coords == "bed" else (0,1,2,4)
+
+        db_settings = {
+            "bed": {
+                "offsets": (1, 0), "columns": (0, 1, 2, 3),
+            },
+            "hmmer": {
+                "offsets": (0, 0), "columns": (0, 1, 2, 4),
+            },
+        }
+
+        settings = db_settings.get(coords, db_settings["bed"])
+        self.coordinate_modifiers = settings["offsets"]
+        self.cols = settings["columns"]
         # GMGC10.000_000_128.UNKNOWN,1,420,4.958096936477401e-50,GH88,417
 
         super().__init__(logger, input_data, db_path=db_path, db_session=db_session)
