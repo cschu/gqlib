@@ -7,6 +7,7 @@ import gzip
 import json
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from .models import db
 
@@ -126,8 +127,35 @@ class GqDatabaseImporter(ABC):
                 self.db_session.commit()
 
 
+@dataclass
+class DefaultDatabaseInputFormat:
+    """ Default database input format. """
+    offsets: tuple = field(default=(0, 0))
+    columns: tuple = field(default=(0, 1, 2, 3))
+    separator: str = "\t"
+
+@dataclass
+class BedDatabaseInputFormat(DefaultDatabaseInputFormat):
+    """ BED database input format. """
+    # we store everything as 1-based, closed intervals internally
+    # bed coords coming in as [x,y)_0 -> [x+1, y]_1
+    offsets: tuple = field(default=(1, 0))
+
+@dataclass
+class HmmerDatabaseInputFormat(DefaultDatabaseInputFormat):
+    """ HMMer database input format. """
+    columns: tuple = field(default=(0, 1, 2, 4))
+    separator: str = ","
+
+DB_SETTINGS_SELECTION = {
+    "default": DefaultDatabaseInputFormat,
+    "bed": BedDatabaseInputFormat,
+    "hmmer": HmmerDatabaseInputFormat,
+}
+
 # class DomainBedDatabaseImporter(GqDatabaseImporter):
 class SmallDatabaseImporter(GqDatabaseImporter):
+    """ Import small dict-based databases. """
     def __init__(
         self,
         logger,
@@ -135,26 +163,28 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         db_path=None,
         db_session=None,
         single_category="domain",
-        sep="\t",
-        coords="bed",
+        db_format="default",
     ):
         self.single_category = single_category
-        self.sep = sep
-        # we store everything as 1-based, closed intervals internally
-        # bed coords coming in as [x,y)_0 -> [x+1, y]_1
 
-        db_settings = {
-            "bed": {
-                "offsets": (1, 0), "columns": (0, 1, 2, 3),
-            },
-            "hmmer": {
-                "offsets": (0, 0), "columns": (0, 1, 2, 4),
-            },
-        }
+        # db_settings = {
+        #     "bed": {
+        #         "offsets": (1, 0), "columns": (0, 1, 2, 3), "separator": "\t",
+        #     },
+        #     "hmmer": {
+        #         "offsets": (0, 0), "columns": (0, 1, 2, 4), "separator": ",",
+        #     },
+        # }
 
-        settings = db_settings.get(coords, db_settings["bed"])
-        self.coordinate_modifiers = settings["offsets"]
-        self.cols = settings["columns"]
+        self.db_settings = DB_SETTINGS_SELECTION.get(db_format)
+        if self.db_settings is None:
+            raise ValueError(f"{db_format=} is not recognised.")
+
+        # self.sep = sep
+        # settings = db_settings.get(coords, db_settings["bed"])
+        # self.coordinate_modifiers = settings["offsets"]
+        # self.cols = settings["columns"]
+        # self.sep = settings["separator"]
         # GMGC10.000_000_128.UNKNOWN,1,420,4.958096936477401e-50,GH88,417
 
         super().__init__(logger, input_data, db_path=db_path, db_session=db_session)
@@ -163,8 +193,8 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         categories = {}
 
         for self.nseqs, line in enumerate(_in, start=1):
-            line = line.strip().split(self.sep)
-            categories.setdefault(self.single_category, set()).update(line[self.cols[-1]].split(","))
+            line = line.strip().split(self.db_settings.separator)
+            categories.setdefault(self.single_category, set()).update(line[self.db_settings.columns[-1]].split(","))
 
         self.logger.info("    Parsed %s entries.", self.nseqs)
         return categories
@@ -174,11 +204,11 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         for i, line in enumerate(_in, start=1):
             if i % 10000 == 0 and self.db_session:
                 self.db_session.commit()
-            line = line.strip().split(self.sep)
-            gid, start, end, features = (c for i, c in enumerate(line) if i in self.cols)
+            line = line.strip().split(self.db_settings.separator)
+            gid, start, end, features = (c for i, c in enumerate(line) if i in self.db_settings.columns)
             # we store everything as 1-based, closed intervals internally
-            start = int(start) + self.coordinate_modifiers[0]
-            end = int(end) + self.coordinate_modifiers[1]
+            start = int(start) + self.db_settings.offsets[0]
+            end = int(end) + self.db_settings.offsets[1]
             # was: start + 1
             annotations.setdefault((gid, start, end), set()).update(features.split(","))
 
