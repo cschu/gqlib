@@ -1,4 +1,4 @@
-# pylint: disable=C0103,R0902,R0913
+# pylint: disable=C0103,R0902,R0913,W2301
 
 """ module docstring """
 
@@ -13,6 +13,7 @@ from .models import db
 
 
 class GqDatabaseImporter(ABC):
+    """ Base dDatabase importer class"""
     def __init__(self, logger, input_data, db_path=None, db_session=None):
         self.logger = logger
         self.db_path = db_path
@@ -28,6 +29,7 @@ class GqDatabaseImporter(ABC):
 
     @staticmethod
     def get_open_function(f):
+        """ Returns a file open function corresponding to gzip-compression status. """
         gz_magic = b"\x1f\x8b\x08"
         # pylint: disable=R1732,W0511
         gzipped = open(f, "rb").read(3).startswith(gz_magic)
@@ -35,13 +37,16 @@ class GqDatabaseImporter(ABC):
 
     @abstractmethod
     def parse_categories(self, input_data):
+        """ abstract method to parse categories from various data formats """
         ...
 
     @abstractmethod
     def parse_annotations(self, input_data):
+        """ abstract method to parse annotations from various data formats """
         ...
 
     def gather_category_and_feature_data(self, input_data):
+        """ Initial pass to parse and encode category/feature data. """
         self.logger.info("First pass: gathering category and feature information.")
 
         _open = GqDatabaseImporter.get_open_function(input_data)
@@ -82,6 +87,7 @@ class GqDatabaseImporter(ABC):
                 json.dump(self.code_map, _map_out)
 
     def process_annotations(self, input_data):
+        """ Second pass to parse and store annotations. """
         self.logger.info("Second pass: Encoding sequence annotations")
 
         _open = GqDatabaseImporter.get_open_function(input_data)
@@ -155,7 +161,7 @@ DB_SETTINGS_SELECTION = {
 
 # class DomainBedDatabaseImporter(GqDatabaseImporter):
 class SmallDatabaseImporter(GqDatabaseImporter):
-    """ Import small dict-based databases. """
+    """ Importer for small dict-based databases. """
     def __init__(
         self,
         logger,
