@@ -139,6 +139,7 @@ class DefaultDatabaseInputFormat:
     offsets: tuple = field(default=(0, 0))
     columns: tuple = field(default=(0, 1, 2, 3))
     separator: str = "\t"
+    header: tuple = None
 
 @dataclass
 class BedDatabaseInputFormat(DefaultDatabaseInputFormat):
@@ -152,6 +153,7 @@ class HmmerDatabaseInputFormat(DefaultDatabaseInputFormat):
     """ HMMer database input format. """
     columns: tuple = field(default=(0, 1, 2, 4))
     separator: str = ","
+    header: tuple = field(default=("sequenceID", "start", "end", "pvalue", "family", "annotLength"))
 
 DB_SETTINGS_SELECTION = {
     "default": DefaultDatabaseInputFormat,
@@ -199,8 +201,12 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         categories = {}
 
         for self.nseqs, line in enumerate(_in, start=1):
-            line = line.strip().split(self.db_settings.separator)
-            categories.setdefault(self.single_category, set()).update(line[self.db_settings.columns[-1]].split(","))
+            line = line.strip()
+            if line:
+                line = line.split(self.db_settings.separator)
+                if self.db_settings.header is not None and line[0] == self.db_settings.header[0]:
+                    continue
+                categories.setdefault(self.single_category, set()).update(line[self.db_settings.columns[-1]].split(","))
 
         self.logger.info("    Parsed %s entries.", self.nseqs)
         return categories
@@ -210,12 +216,16 @@ class SmallDatabaseImporter(GqDatabaseImporter):
         for i, line in enumerate(_in, start=1):
             if i % 10000 == 0 and self.db_session:
                 self.db_session.commit()
-            line = line.strip().split(self.db_settings.separator)
-            gid, start, end, features = (c for i, c in enumerate(line) if i in self.db_settings.columns)
-            # we store everything as 1-based, closed intervals internally
-            start = int(start) + self.db_settings.offsets[0]
-            end = int(end) + self.db_settings.offsets[1]
-            # was: start + 1
-            annotations.setdefault((gid, start, end), set()).update(features.split(","))
+            line = line.strip()
+            if line:
+                line = line.split(self.db_settings.separator)
+                if self.db_settings.header is not None and line[0] == self.db_settings.header[0]:
+                    continue
+                gid, start, end, features = (c for i, c in enumerate(line) if i in self.db_settings.columns)
+                # we store everything as 1-based, closed intervals internally
+                start = int(start) + self.db_settings.offsets[0]
+                end = int(end) + self.db_settings.offsets[1]
+                # was: start + 1
+                annotations.setdefault((gid, start, end), set()).update(features.split(","))
 
         return annotations
